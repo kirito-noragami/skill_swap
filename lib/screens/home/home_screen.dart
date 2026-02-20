@@ -6,9 +6,10 @@ import '../../services/database_service.dart';
 import '../../models/request_model.dart';
 import '../../models/user_model.dart';
 import '../../widgets/post_card.dart';
-import 'add_post_screen.dart'; // سننشئها لاحقاً
+import 'add_post_screen.dart';
 import '../auth/login_screen.dart';
 import 'request_details_screen.dart';
+import 'my_requests_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,14 +18,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
+class _HomeScreenState extends State<HomeScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  
+  // ✅ متغير لتخزين كلمة البحث
+  String _searchQuery = "";
 
   @override
   Widget build(BuildContext context) {
@@ -32,130 +30,126 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final dbService = Provider.of<DatabaseService>(context, listen: false);
     final user = authService.currentUser;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      
-      // الزر العائم لإضافة طلب جديد
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // الانتقال لشاشة الإضافة (سنضيفها الخطوة القادمة)
-           Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPostScreen()));
-        },
-        backgroundColor: Colors.indigo,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: Text("طلب مساعدة", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white)),
-      ),
+    return StreamBuilder<UserModel>(
+      stream: dbService.getUserData(user!.uid),
+      builder: (context, userSnapshot) {
+        String name = "Loading...";
+        String email = user.email ?? "";
+        int coins = 0;
 
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              expandedHeight: 120,
-              floating: true,
-              pinned: true,
-              backgroundColor: Colors.indigo,
-              elevation: 0,
-              title: Text("SkillSwap", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () {
-                     authService.signOut();
-                     Navigator.of(context).pushAndRemoveUntil(
-                       MaterialPageRoute(builder: (_) => const LoginScreen()),
-                       (route) => false,
-                     );
-                  },
-                ),
-              ],
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: Colors.white,
-                indicatorWeight: 3,
-                labelStyle: GoogleFonts.cairo(fontWeight: FontWeight.bold, fontSize: 16),
-                tabs: const [
-                  Tab(text: "لك (For You)"),
-                  Tab(text: "استكشف (Explore)"),
-                ],
-              ),
-            ),
-          ];
-        },
-        body: StreamBuilder<UserModel>(
-          stream: dbService.getUserData(user!.uid),
-          builder: (context, userSnapshot) {
-            if (!userSnapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (userSnapshot.hasData) {
+          final userData = userSnapshot.data!;
+          name = userData.name;
+          email = userData.email;
+          coins = userData.coins;
+        }
 
-            final mySkills = userSnapshot.data!.skills;
-
-            return TabBarView(
-              controller: _tabController,
+        return Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: const Color(0xFFF5F6FA),
+          
+          drawer: Drawer(
+            child: ListView(
+              padding: EdgeInsets.zero,
               children: [
-                // التبويب 1: الخوارزمية (طلبات تناسب مهاراتي)
-                _buildRequestList(dbService, filterSkills: mySkills),
-
-                // التبويب 2: استكشف (كل الطلبات)
-                _buildRequestList(dbService, filterSkills: null),
+                UserAccountsDrawerHeader(decoration: const BoxDecoration(color: Colors.indigo), accountName: Text(name, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)), accountEmail: Text(email, style: GoogleFonts.cairo()), currentAccountPicture: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, size: 40, color: Colors.indigo))),
+                ListTile(leading: const Icon(Icons.list_alt, color: Colors.indigo), title: Text("طلباتي الخاصة", style: GoogleFonts.cairo()), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const MyRequestsScreen())); }),
+                ListTile(leading: const Icon(Icons.monetization_on_outlined, color: Colors.amber), title: Text("رصيد النقاط: $coins SP", style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
+                const Divider(),
+                ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: Text("تسجيل الخروج", style: GoogleFonts.cairo(color: Colors.red)), onTap: () { authService.signOut(); Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false); }),
               ],
-            );
-          },
-        ),
-      ),
-    );
-  }
+            ),
+          ),
 
-  // دالة بناء القائمة لتجنب تكرار الكود
-  Widget _buildRequestList(DatabaseService db, {List<String>? filterSkills}) {
-    return StreamBuilder<List<RequestModel>>(
-      stream: db.getMyFeed(filterSkills ?? []), // الدالة التي كتبناها في DatabaseService
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return _buildEmptyState();
-        }
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPostScreen())),
+            backgroundColor: Colors.indigo,
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: Text("طلب مساعدة", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
 
-        // تصفية إضافية في الواجهة (لضمان الدقة)
-        var requests = snapshot.data!;
-        if (filterSkills != null) {
-          requests = requests.where((req) {
-            // هل أي من وسوم الطلب موجودة في مهاراتي؟
-            return req.tags.any((tag) => filterSkills.contains(tag));
-          }).toList();
-        }
+          body: NestedScrollView(
+            headerSliverBuilder: (context, innerBoxIsScrolled) {
+              return [
+                SliverAppBar(
+                  expandedHeight: 140, // مساحة إضافية لشريط البحث
+                  floating: true,
+                  pinned: true,
+                  backgroundColor: Colors.indigo,
+                  elevation: 0,
+                  title: Text("SkillSwap", style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  actions: [
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(color: Colors.black.withOpacity(0.2), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.amber.withOpacity(0.5))),
+                      child: Row(children: [const Icon(Icons.monetization_on, color: Colors.amber, size: 20), const SizedBox(width: 8), Text("$coins SP", style: GoogleFonts.cairo(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14))]),
+                    ),
+                  ],
+                  // ✅ شريط البحث السحري
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Padding(
+                      padding: const EdgeInsets.only(top: 90, left: 16, right: 16),
+                      child: TextField(
+                        onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                        decoration: InputDecoration(
+                          hintText: "ابحث عن جافا، فلاتر، تصميم...",
+                          hintStyle: GoogleFonts.cairo(color: Colors.grey),
+                          prefixIcon: const Icon(Icons.search, color: Colors.indigo),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ];
+            },
+            
+            // ✅ Feed واحد يحتوي على الفلتر المحلي
+            body: StreamBuilder<List<RequestModel>>(
+              stream: dbService.getMyFeed([], user.uid), 
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData || snapshot.data!.isEmpty) return _buildEmptyState();
 
-        if (requests.isEmpty) return _buildEmptyState();
-
-        return ListView.builder(
-          padding: const EdgeInsets.only(top: 10, bottom: 80),
-          itemCount: requests.length,
-          itemBuilder: (context, index) {
-            final req = requests[index];
-            return PostCard(
-              request: req,
-              onTap: () {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => RequestDetailsScreen(request: req),
-    ),
-  );
-},
-              onOfferHelp: () {
-                // منطق InDrive: تقديم عرض مساعدة
-                final user = Provider.of<AuthService>(context, listen: false).currentUser;
-                Provider.of<DatabaseService>(context, listen: false)
-                    .applyToRequest(req.id, user!.uid);
+                var requests = snapshot.data!;
                 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("تم إرسال عرضك للمساعدة بـ ${req.title}")),
+                // ✅ فلتر البحث الفوري (يبحث في العنوان والمادة والوصف)
+                if (_searchQuery.isNotEmpty) {
+                  requests = requests.where((req) {
+                    return req.title.toLowerCase().contains(_searchQuery) ||
+                           req.category.toLowerCase().contains(_searchQuery) ||
+                           req.description.toLowerCase().contains(_searchQuery);
+                  }).toList();
+                }
+
+                if (requests.isEmpty) {
+                  return Center(child: Text("لا توجد نتائج مطابقة لبحثك", style: GoogleFonts.cairo(fontSize: 18, color: Colors.grey)));
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.only(top: 10, bottom: 80),
+                  itemCount: requests.length,
+                  itemBuilder: (context, index) {
+                    final req = requests[index];
+                    return PostCard(
+                      request: req,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(request: req))),
+                      onOfferHelp: () {
+                        Provider.of<DatabaseService>(context, listen: false).applyToRequest(req.id, user.uid);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("تم إرسال عرضك للمساعدة بـ ${req.title}")));
+                      },
+                    );
+                  },
                 );
               },
-            );
-          },
+            ),
+          ),
         );
-      },
+      }
     );
   }
 
@@ -166,10 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           Icon(Icons.search_off_rounded, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 15),
-          Text(
-            "لا توجد طلبات حالياً",
-            style: GoogleFonts.cairo(fontSize: 18, color: Colors.grey),
-          ),
+          Text("لا توجد طلبات متاحة حالياً", style: GoogleFonts.cairo(fontSize: 18, color: Colors.grey)),
         ],
       ),
     );

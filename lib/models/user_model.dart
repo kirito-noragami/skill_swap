@@ -23,6 +23,11 @@ class UserModel {
     this.ratingCount = 0,
   });
 
+  // ---------------------------------------------------------
+  // ✅ THE FIX: This makes 'coins' work in HomeScreen
+  // ---------------------------------------------------------
+  int get coins => wallet;
+
   // لتحويل البيانات القادمة من Firebase
   factory UserModel.fromMap(Map<String, dynamic> map, String uid) {
     return UserModel(
@@ -31,10 +36,11 @@ class UserModel {
       name: map['name'] ?? '',
       major: map['major'] ?? 'General',
       skills: List<String>.from(map['skills'] ?? []),
-      wallet: map['wallet'] ?? 10, // يبدأ بـ 10 دقائق مجاناً
-      totalMinutesHelped: map['stats']?['totalMinutesHelped'] ?? 0,
-      ratingSum: map['stats']?['ratingSum'] ?? 0,
-      ratingCount: map['stats']?['ratingCount'] ?? 0,
+      // Updated to read 'wallet' OR 'coins' (to be safe)
+      wallet: map['wallet'] ?? map['coins'] ?? 10, 
+      totalMinutesHelped: map['stats']?['totalMinutesHelped'] ?? map['totalMinutesHelped'] ?? 0,
+      ratingSum: map['stats']?['ratingSum'] ?? map['ratingSum'] ?? 0,
+      ratingCount: map['stats']?['ratingCount'] ?? map['ratingCount'] ?? 0,
     );
   }
 
@@ -45,7 +51,8 @@ class UserModel {
       'name': name,
       'major': major,
       'skills': skills,
-      'wallet': wallet,
+      'wallet': wallet, // Saved as wallet
+      'coins': wallet,  // Saved as coins too (backup)
       'stats': {
         'totalMinutesHelped': totalMinutesHelped,
         'ratingSum': ratingSum,

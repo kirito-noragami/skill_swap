@@ -5,21 +5,33 @@ import '../models/request_model.dart';
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // 1. جلب بيانات المستخدم الحالي
+  // التحقق هل المستخدم يملك حساباً
+  Future<bool> checkUserExists(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    return doc.exists;
+  }
+
+  // جلب بيانات المستخدم (✅ تم إضافة حماية ضد الانهيار Null Check)
   Stream<UserModel> getUserData(String uid) {
     return _db.collection('users').doc(uid).snapshots().map((snapshot) {
+      if (!snapshot.exists || snapshot.data() == null) {
+        // إذا لم يجد البيانات، يعطي بيانات افتراضية لمنع الشاشة الحمراء
+        return UserModel(uid: uid, email: 'error', name: 'جاري التحميل...', major: '', skills: [], wallet: 0);
+      }
       return UserModel.fromMap(snapshot.data()!, snapshot.id);
     });
   }
 
-  // 2. نشر طلب جديد
-  Future<void> createRequest(String title, String category, UserModel user) async {
+  // نشر طلب جديد
+  Future<void> createRequest(String title, String description, String topic, List<String> times, UserModel user) async {
     await _db.collection('requests').add({
       'studentId': user.uid,
       'studentName': user.name,
       'title': title,
-      'category': category, // هنا نستخدم التخصص كـ Category للسهولة
-      'tags': [category],   // تبسيط للوقت
+      'description': description,
+      'category': topic, // نستخدم الموضوع هنا
+      'tags': [topic], 
+      'availableTimes': times,
       'createdAt': FieldValue.serverTimestamp(),
       'status': 'OPEN',
       'applicants': [],
@@ -27,33 +39,36 @@ class DatabaseService {
     });
   }
 
-  // 3. (InDrive Logic) معلم يعرض المساعدة
+  // عرض المساعدة
   Future<void> applyToRequest(String requestId, String tutorId) async {
     await _db.collection('requests').doc(requestId).update({
-      'applicants': FieldValue.arrayUnion([tutorId]) // إضافة الـ ID للقائمة
+      'applicants': FieldValue.arrayUnion([tutorId])
     });
   }
 
-  // 4. (Selection Logic) الطالب يختار المعلم
+  // اختيار المعلم
   Future<void> selectTutor(String requestId, String tutorId) async {
     await _db.collection('requests').doc(requestId).update({
       'selectedTutorId': tutorId,
-      'status': 'IN_PROGRESS', // تحويل حالة الطلب
+      'status': 'IN_PROGRESS',
     });
-    // هنا يجب إنشاء غرفة شات (سنقوم بها لاحقاً)
   }
 
-  // 5. جلب الطلبات المناسبة لمهاراتي (الخوارزمية)
-  Stream<List<RequestModel>> getMyFeed(List<String> mySkills) {
-    // هذه الكويري بسيطة: تجلب كل الطلبات المفتوحة
-    // التصفية الدقيقة ستتم في الواجهة للسرعة
-    return _db
-        .collection('requests')
-        .where('status', isEqualTo: 'OPEN')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) => RequestModel.fromMap(doc.data(), doc.id)).toList();
+  // جلب الطلبات (للرئيسية)
+  Stream<List<RequestModel>> getMyFeed(List<String> mySkills, String myUid) {
+    return _db.collection('requests').orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+      var requests = snapshot.docs.map((doc) => RequestModel.fromMap(doc.data(), doc.id)).toList();
+      return requests.where((req) => req.studentId != myUid && req.status == 'OPEN').toList();
+    });
+  }
+
+  // جلب طلباتي فقط
+  Stream<List<RequestModel>> getMyRequests(String myUid) {
+    return _db.collection('requests').where('studentId', isEqualTo: myUid).snapshots().map((snapshot) {
+      final list = snapshot.docs.map((doc) => RequestModel.fromMap(doc.data(), doc.id)).toList();
+      // Sort client-side to avoid requiring a Firestore composite index
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     });
   }
 }

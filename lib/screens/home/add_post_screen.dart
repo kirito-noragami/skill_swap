@@ -13,110 +13,89 @@ class AddPostScreen extends StatefulWidget {
 
 class _AddPostScreenState extends State<AddPostScreen> {
   final _titleController = TextEditingController();
-  final _descController = TextEditingController(); // يمكن إضافته للمودل لاحقاً
+  final _descController = TextEditingController();
+  final _topicController = TextEditingController(); // ✅ حقل الموضوع/التقنية
   
-  // قائمة المواد/الأقسام
-  final List<String> _categories = ['برمجة (Java)', 'خوارزميات', 'رياضيات', 'لغات', 'تصميم'];
-  String _selectedCategory = 'برمجة (Java)';
+  final _timeController = TextEditingController();
+  List<String> _availableTimes = [];
   bool _isLoading = false;
 
+  void _addTime() {
+    if (_timeController.text.trim().isNotEmpty) {
+      setState(() {
+        _availableTimes.add(_timeController.text.trim());
+        _timeController.clear();
+      });
+    }
+  }
+
   void _submitPost() async {
-    if (_titleController.text.isEmpty) return;
+    if (_titleController.text.isEmpty || _descController.text.isEmpty || _topicController.text.isEmpty || _availableTimes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("يرجى ملء جميع الحقول وإضافة وقت واحد على الأقل")));
+      return;
+    }
 
     setState(() => _isLoading = true);
-    
     try {
       final user = Provider.of<AuthService>(context, listen: false).currentUser;
       final db = Provider.of<DatabaseService>(context, listen: false);
-      
-      // نحتاج لجلب بيانات المستخدم الكاملة (مثل الاسم) لإضافتها للطلب
-      // هنا سنفترض أننا نملك البيانات أو نجلبها بسرعة (للتبسيط سنستخدم الاسم من الذاكرة أو الايميل)
-      // الأفضل: جلب المودل كاملاً. للسرعة الآن:
-      
-      // ملاحظة: في التطبيق الحقيقي يجب جلب الـ UserModel أولاً
-      // سنقوم بجلب بيانات المستخدم الحالية بسرعة
       final userDoc = await db.getUserData(user!.uid).first;
 
-      await db.createRequest(_titleController.text, _selectedCategory, userDoc);
+      // نرسل الـ Topic بدلاً من الـ Category
+      await db.createRequest(_titleController.text.trim(), _descController.text.trim(), _topicController.text.trim(), _availableTimes, userDoc);
 
       if (mounted) {
-        Navigator.pop(context); // إغلاق الشاشة
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("تم نشر طلبك بنجاح! انتظر العروض 🚀")),
-        );
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم النشر بنجاح!")));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("خطأ: $e")));
     }
-    setState(() => _isLoading = false);
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text("طلب مساعدة جديد", style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: Text("طلب مساعدة جديد", style: GoogleFonts.cairo(fontWeight: FontWeight.bold)), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("ما الذي تحتاج مساعدة فيه؟", style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold)),
+            TextField(controller: _titleController, decoration: InputDecoration(labelText: "عنوان الطلب", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
+            const SizedBox(height: 20),
+            TextField(controller: _descController, maxLines: 3, decoration: InputDecoration(labelText: "تفاصيل المشكلة...", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
+            const SizedBox(height: 20),
+            
+            // ✅ حقل التقنية (بدون قوائم مزعجة)
+            TextField(controller: _topicController, decoration: InputDecoration(labelText: "التقنية / المادة (مثال: Java, React, جبر)", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
             const SizedBox(height: 20),
 
-            // العنوان
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                labelText: "عنوان الطلب (مثلاً: شرح Loop)",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Icon(Icons.title),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // القسم
-            Text("المادة / التخصص", style: GoogleFonts.cairo(fontSize: 14, color: Colors.grey)),
+            Text("الأوقات المناسبة لك:", style: GoogleFonts.cairo(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedCategory,
-                  isExpanded: true,
-                  items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: GoogleFonts.cairo()))).toList(),
-                  onChanged: (val) => setState(() => _selectedCategory = val!),
-                ),
+            Row(
+              children: [
+                Expanded(child: TextField(controller: _timeController, decoration: InputDecoration(hintText: "مثال: الجمعة مساءً", border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))))),
+                const SizedBox(width: 10),
+                IconButton(icon: const Icon(Icons.add_circle, color: Colors.indigo, size: 40), onPressed: _addTime)
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              children: _availableTimes.map((time) => Chip(label: Text(time), onDeleted: () => setState(() => _availableTimes.remove(time)), deleteIconColor: Colors.red)).toList(),
+            ),
+            
+            const SizedBox(height: 40),
+            _isLoading ? const Center(child: CircularProgressIndicator()) : SizedBox(
+              width: double.infinity, height: 50,
+              child: ElevatedButton.icon(
+                onPressed: _submitPost, icon: const Icon(Icons.cloud_upload),
+                label: Text("نشر الطلب", style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
               ),
             ),
-            const SizedBox(height: 40),
-
-            // زر النشر
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _submitPost,
-                      icon: const Icon(Icons.cloud_upload),
-                      label: Text("نشر الطلب", style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
           ],
         ),
       ),
