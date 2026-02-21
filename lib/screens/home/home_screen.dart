@@ -10,6 +10,7 @@ import 'add_post_screen.dart';
 import '../auth/login_screen.dart';
 import 'request_details_screen.dart';
 import 'my_requests_screen.dart';
+import 'my_sessions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -54,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 UserAccountsDrawerHeader(decoration: const BoxDecoration(color: Colors.indigo), accountName: Text(name, style: GoogleFonts.cairo(fontWeight: FontWeight.bold)), accountEmail: Text(email, style: GoogleFonts.cairo()), currentAccountPicture: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, size: 40, color: Colors.indigo))),
                 ListTile(leading: const Icon(Icons.list_alt, color: Colors.indigo), title: Text("طلباتي الخاصة", style: GoogleFonts.cairo()), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const MyRequestsScreen())); }),
+                ListTile(leading: const Icon(Icons.video_call_outlined, color: Colors.indigo), title: Text("جلساتي", style: GoogleFonts.cairo()), onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const MySessionsScreen())); }),
                 ListTile(leading: const Icon(Icons.monetization_on_outlined, color: Colors.amber), title: Text("رصيد النقاط: $coins SP", style: GoogleFonts.cairo(fontWeight: FontWeight.bold))),
                 const Divider(),
                 ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: Text("تسجيل الخروج", style: GoogleFonts.cairo(color: Colors.red)), onTap: () { authService.signOut(); Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false); }),
@@ -138,10 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return PostCard(
                       request: req,
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(request: req))),
-                      onOfferHelp: () {
-                        Provider.of<DatabaseService>(context, listen: false).applyToRequest(req.id, user.uid);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("تم إرسال عرضك للمساعدة بـ ${req.title}")));
-                      },
+                      onOfferHelp: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(request: req))),
                     );
                   },
                 );
